@@ -14,6 +14,7 @@ void copy_directory(const char *src, const char *dest, int *count, int total);
 void sync_folder(const char *local, const char *remote, const char *name);
 void count_files(const char *path, int *count);
 time_t get_modified_time(const char *path);
+time_t get_newest_mtime(const char *path);
 
 int load_config(const char *filename, char *local_wtf, char *local_interface, 
         char *remote_wtf, char *remote_interface){
@@ -75,7 +76,7 @@ void apply_args(int argc, char *argv[], char *local_wtf, char *local_interface,
         } else if(strcmp(key, "--remote_interface") == 0){
             strcpy(remote_interface, value);
         }
-}
+    }
 
 }
 
@@ -148,11 +149,10 @@ void copy_directory(const char *src, const char *dest, int *count, int total){
 void sync_folder(const char *local, const char *remote, const char *name){
 
 
-    time_t local_mod_time = get_modified_time(local);
+    time_t local_mod_time = get_newest_mtime(local);
 
 
-    time_t remote_mod_time = get_modified_time(remote);
-
+    time_t remote_mod_time = get_newest_mtime(remote);
 
     int count = 0;
     
@@ -225,6 +225,44 @@ time_t get_modified_time(const char *path){
     return info.st_mtime;
 }
 
+time_t get_newest_mtime(const char *path){
+    time_t newest = 0;
+    DIR *dir = opendir(path);
+
+    if(dir == NULL){
+        perror(path);
+        return -1;
+    }
+    struct dirent *entry;
+    while((entry = readdir(dir)) != NULL){
+
+        if(strcmp(entry->d_name,".") == 0 || strcmp(entry->d_name, "..") == 0){
+            continue;
+        }
+
+
+        char src_path[1024];
+
+
+        snprintf(src_path, sizeof(src_path), "%s/%s", path, entry->d_name);
+
+        struct stat entry_stat;
+        stat(src_path, &entry_stat);
+        
+        if (S_ISDIR(entry_stat.st_mode)){
+            time_t sub = get_newest_mtime(src_path);
+            if(sub > newest) newest = sub;
+        } else {
+            if(entry_stat.st_mtime > newest){
+                newest = entry_stat.st_mtime;
+            }
+        }  
+    }
+        closedir(dir);
+        return newest;
+
+
+}
 
 int main(int argc, char *argv[]){
     char local_wtf_dir[1024] = "";
