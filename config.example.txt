@@ -1,0 +1,4 @@
+local_wtf=C:\path\to\WoW\_retail_\WTF
+local_interface=C:\path\to\WoW\_retail_\Interface
+remote_wtf=\\server\share\WTF
+remote_interface=\\server\share\Interface

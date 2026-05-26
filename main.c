@@ -4,11 +4,80 @@
 #include<time.h>
 #include<dirent.h>
 
+int load_config(const char *filename, char *local_wtf, char *local_interface, 
+        char *remote_wtf, char *remote_interface);
+void apply_args(int argc, char *argv[], char *local_wtf, char *local_interface,
+                char *remote_wtf, char *remote_interface);
+
 void copy_file(const char *src, const char *dest, int *count);
 void copy_directory(const char *src, const char *dest, int *count, int total);
 void sync_folder(const char *local, const char *remote, const char *name);
 void count_files(const char *path, int *count);
 time_t get_modified_time(const char *path);
+
+int load_config(const char *filename, char *local_wtf, char *local_interface, 
+        char *remote_wtf, char *remote_interface){
+    FILE *file = fopen(filename, "r");
+
+    if(file == NULL){
+        perror(filename);
+        return 1;
+    }
+
+    char line[256];
+    while(fgets(line, sizeof(line), file) != NULL){
+        char *equals = strchr(line, '=');
+        if (equals == NULL) continue;
+
+        *equals = '\0';
+        char *key = line;
+        char *value = equals +1;
+
+        value[strcspn(value, "\r\n")] = '\0';
+
+        //Map the config
+        if(strcmp(key, "local_wtf") == 0){
+            strcpy(local_wtf, value);
+        } else if(strcmp(key, "remote_wtf") == 0){
+            strcpy(remote_wtf, value);
+        } else if(strcmp(key, "local_interface") == 0){
+            strcpy(local_interface, value);
+        } else if(strcmp(key, "remote_interface") == 0){
+            strcpy(remote_interface, value);
+        }
+    }
+    if(local_wtf[0] == '\0' || local_interface[0] == '\0' || remote_wtf[0] == '\0' || remote_interface[0] == '\0'){
+        printf("Error: missing keys in config.txt\n");
+        fclose(file);
+        return 1;
+    }
+    fclose(file);
+    return 0;
+}
+
+void apply_args(int argc, char *argv[], char *local_wtf, char *local_interface,
+                char *remote_wtf, char *remote_interface){
+
+    for(int i = 1; i < argc; i++){
+    char *equals = strchr(argv[i], '=');
+    if(equals == NULL) continue;
+
+    *equals = '\0';
+    char *key   = argv[i];
+    char *value = equals + 1;
+    //Map the config
+        if(strcmp(key, "--local_wtf") == 0){
+            strcpy(local_wtf, value);
+        } else if(strcmp(key, "--remote_wtf") == 0){
+            strcpy(remote_wtf, value);
+        } else if(strcmp(key, "--local_interface") == 0){
+            strcpy(local_interface, value);
+        } else if(strcmp(key, "--remote_interface") == 0){
+            strcpy(remote_interface, value);
+        }
+}
+
+}
 
 void copy_file(const char *src, const char *dest, int *count){
     char buffer[4096];
@@ -157,15 +226,29 @@ time_t get_modified_time(const char *path){
 }
 
 
-int main(){
+int main(int argc, char *argv[]){
+    char local_wtf_dir[1024] = "";
+    char local_interface_dir[1024] = "";
+    char remote_wtf_dir[1024] = "";
+    char remote_interface_dir[1024] = "";
 
-    const char* local_wtf_dir = "C:\\Program Files (x86)\\World of Warcraft\\_retail_\\WTF";
-    const char* local_interface_dir = "C:\\Program Files (x86)\\World of Warcraft\\_retail_\\Interface";
 
-    const char* remote_wtf_dir = "\\\\192.168.1.153\\vault\\WOW_ADDON_BACKUP\\WTF";
-    const char* remote_interface_dir = "\\\\192.168.1.153\\vault\\WOW_ADDON_BACKUP\\Interface";
+    if(load_config("config.txt", local_wtf_dir, local_interface_dir, 
+               remote_wtf_dir, remote_interface_dir) != 0){
+    return 1;
+    }
+
+    apply_args(argc, argv, local_wtf_dir, local_interface_dir, 
+           remote_wtf_dir, remote_interface_dir);
+
+    clock_t start = clock();
+
     sync_folder(local_wtf_dir, remote_wtf_dir, "WTF");
     sync_folder(local_interface_dir, remote_interface_dir, "Interface");
 
+    clock_t end = clock();
+    double elapsed = (double)(end - start) / CLOCKS_PER_SEC;
+
+    printf("Completed in %.02f\n", elapsed);
     return 0;
 }
