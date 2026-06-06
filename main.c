@@ -3,20 +3,19 @@
 #include<sys/stat.h>
 #include<time.h>
 #include<dirent.h>
+#include"sync.h"
 
-int load_config(const char *filename, char *local_wtf, char *local_interface, 
-        char *remote_wtf, char *remote_interface);
+
 void apply_args(int argc, char *argv[], char *local_wtf, char *local_interface,
                 char *remote_wtf, char *remote_interface);
 
 void copy_file(const char *src, const char *dest, int *count);
-void copy_directory(const char *src, const char *dest, int *count, int total);
-void sync_folder(const char *local, const char *remote, const char *name);
+void copy_directory(const char *src, const char *dest, int *count, int total, volatile float *progress);
 void count_files(const char *path, int *count);
 time_t get_modified_time(const char *path);
 time_t get_newest_mtime(const char *path);
 
-int load_config(const char *filename, char *local_wtf, char *local_interface, 
+int load_config(const char *filename, char *local_wtf, char *local_interface,
         char *remote_wtf, char *remote_interface){
     FILE *file = fopen(filename, "r");
 
@@ -83,7 +82,7 @@ void apply_args(int argc, char *argv[], char *local_wtf, char *local_interface,
 void copy_file(const char *src, const char *dest, int *count){
     char buffer[4096];
     size_t bytes_read;
-    
+
     FILE *src_file = fopen(src, "rb");
     if(src_file == NULL){
         perror(src);
@@ -107,7 +106,7 @@ void copy_file(const char *src, const char *dest, int *count){
     fclose(dest_file);
 }
 
-void copy_directory(const char *src, const char *dest, int *count, int total){
+void copy_directory(const char *src, const char *dest, int *count, int total, volatile float *progress){
     DIR *dir = opendir(src);
     if(dir == NULL){
         perror(src);
@@ -133,29 +132,26 @@ void copy_directory(const char *src, const char *dest, int *count, int total){
 
         struct stat entry_stat;
         stat(src_path, &entry_stat);
-        
+
         if (S_ISDIR(entry_stat.st_mode)){
-            copy_directory(src_path, dest_path, count, total);
+            copy_directory(src_path, dest_path, count, total, progress);
         } else {
             copy_file(src_path, dest_path, count);
 
         }
+        *progress = (float)(*count) / total;
         printf("\rFiles copied: %d/%d", *count, total);
         fflush(stdout);
     }
         closedir(dir);
 }
 
-void sync_folder(const char *local, const char *remote, const char *name){
-
-
+void sync_folder(const char *local, const char *remote, const char *name, SyncState *sync, volatile float *progress){
     time_t local_mod_time = get_newest_mtime(local);
-
-
     time_t remote_mod_time = get_newest_mtime(remote);
 
     int count = 0;
-    
+
     if(local_mod_time == -1){
         printf("Error: local %s folder not found!", name);
         return;
@@ -166,16 +162,17 @@ void sync_folder(const char *local, const char *remote, const char *name){
 
     if(remote_mod_time == -1){
         printf("First run - copying %s to server\n", name);
-        copy_directory(local, remote, &count, total);
+        copy_directory(local, remote, &count, total, progress);
         printf("\n");
     } else {
         //compare to decide
         if(local_mod_time > remote_mod_time){
         printf("Local is newer -> copy %s to server\n", name);
-        copy_directory(local, remote, &count, total);
+        copy_directory(local, remote, &count, total, progress);
         printf("\n");
         } else if(remote_mod_time > local_mod_time){
             printf("Remote is newer -> No action needed!\n");
+            *progress = 1.0f;
         } else {
             printf("%s is in sync!\n", name);
         }
@@ -204,12 +201,12 @@ void count_files(const char *path, int *count){
 
         struct stat entry_stat;
         stat(src_path, &entry_stat);
-        
+
         if (S_ISDIR(entry_stat.st_mode)){
             count_files(src_path, count);
         } else {
             (*count)++;
-        }  
+        }
     }
         closedir(dir);
 
@@ -248,7 +245,7 @@ time_t get_newest_mtime(const char *path){
 
         struct stat entry_stat;
         stat(src_path, &entry_stat);
-        
+
         if (S_ISDIR(entry_stat.st_mode)){
             time_t sub = get_newest_mtime(src_path);
             if(sub > newest) newest = sub;
@@ -256,7 +253,7 @@ time_t get_newest_mtime(const char *path){
             if(entry_stat.st_mtime > newest){
                 newest = entry_stat.st_mtime;
             }
-        }  
+        }
     }
         closedir(dir);
         return newest;
@@ -264,25 +261,29 @@ time_t get_newest_mtime(const char *path){
 
 }
 
-int main(int argc, char *argv[]){
+int sync_main(int argc, char *argv[], SyncState *sync){
     char local_wtf_dir[1024] = "";
     char local_interface_dir[1024] = "";
     char remote_wtf_dir[1024] = "";
     char remote_interface_dir[1024] = "";
 
-
-    if(load_config("config.txt", local_wtf_dir, local_interface_dir, 
+    if(load_config("config.txt", local_wtf_dir, local_interface_dir,
                remote_wtf_dir, remote_interface_dir) != 0){
     return 1;
     }
 
-    apply_args(argc, argv, local_wtf_dir, local_interface_dir, 
+    apply_args(argc, argv, local_wtf_dir, local_interface_dir,
            remote_wtf_dir, remote_interface_dir);
+
+    strcpy(sync->local_wtf, local_wtf_dir);
+    strcpy(sync->local_interface, local_interface_dir);
+    strcpy(sync->remote_wtf, remote_wtf_dir);
+    strcpy(sync->remote_interface, remote_interface_dir);
 
     clock_t start = clock();
 
-    sync_folder(local_wtf_dir, remote_wtf_dir, "WTF");
-    sync_folder(local_interface_dir, remote_interface_dir, "Interface");
+    sync_folder(local_wtf_dir, remote_wtf_dir, "WTF", sync, &sync->wtf_progress);
+    sync_folder(local_interface_dir, remote_interface_dir, "Interface", sync, &sync->interface_progress);
 
     clock_t end = clock();
     double elapsed = (double)(end - start) / CLOCKS_PER_SEC;
