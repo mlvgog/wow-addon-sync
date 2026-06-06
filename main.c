@@ -172,6 +172,7 @@ void sync_folder(const char *local, const char *remote, const char *name, SyncSt
         printf("\n");
         } else if(remote_mod_time > local_mod_time){
             printf("Remote is newer -> No action needed!\n");
+            *progress = 1.0f;
         } else {
             printf("%s is in sync!\n", name);
         }
@@ -273,6 +274,11 @@ int sync_main(int argc, char *argv[], SyncState *sync){
 
     apply_args(argc, argv, local_wtf_dir, local_interface_dir,
            remote_wtf_dir, remote_interface_dir);
+
+    strcpy(sync->local_wtf, local_wtf_dir);
+    strcpy(sync->local_interface, local_interface_dir);
+    strcpy(sync->remote_wtf, remote_wtf_dir);
+    strcpy(sync->remote_interface, remote_interface_dir);
 
     clock_t start = clock();
 
