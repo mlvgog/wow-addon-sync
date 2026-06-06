@@ -35,7 +35,6 @@ int load_config(const char *filename, char *local_wtf, char *local_interface,
 
         value[strcspn(value, "\r\n")] = '\0';
 
-        //Map the config
         if(strcmp(key, "local_wtf") == 0){
             strcpy(local_wtf, value);
         } else if(strcmp(key, "remote_wtf") == 0){
@@ -65,7 +64,6 @@ void apply_args(int argc, char *argv[], char *local_wtf, char *local_interface,
     *equals = '\0';
     char *key   = argv[i];
     char *value = equals + 1;
-    //Map the config
         if(strcmp(key, "--local_wtf") == 0){
             strcpy(local_wtf, value);
         } else if(strcmp(key, "--remote_wtf") == 0){
@@ -165,7 +163,6 @@ void sync_folder(const char *local, const char *remote, const char *name, SyncSt
         copy_directory(local, remote, &count, total, progress);
         printf("\n");
     } else {
-        //compare to decide
         if(local_mod_time > remote_mod_time){
         printf("Local is newer -> copy %s to server\n", name);
         copy_directory(local, remote, &count, total, progress);

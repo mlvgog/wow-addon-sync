@@ -3,7 +3,6 @@
 
 #include <time.h>
 
-// the struct both files share
 typedef struct {
     char local_wtf[1024];
     char local_interface[1024];
@@ -18,7 +17,6 @@ typedef struct {
     volatile int state;
 } SyncState;
 
-// functions gui.c needs to call
 int load_config(const char *filename, char *local_wtf, char *local_interface,
                 char *remote_wtf, char *remote_interface);
 void sync_folder(const char *local, const char *remote, const char *name, SyncState *sync, volatile float *progress);
